@@ -1,11 +1,12 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     fmt::Debug,
     ops::Deref,
-    sync::{Arc, Weak},
+    rc::{Rc, Weak},
 };
 
-use parking_lot::RwLock;
+// use parking_lot::RwLock;
 
 use log::debug;
 use masonry::core::{ErasedAction, WidgetId};
@@ -70,11 +71,18 @@ impl Debug for WindowEventHandler {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct InternWindowEventHandler(Arc<RwLock<WindowEventHandler>>);
+pub(crate) struct InternWindowEventHandler(SendWrapper<Rc<RefCell<WindowEventHandler>>>);
+
+impl Default for InternWindowEventHandler {
+    fn default() -> Self {
+        Self(SendWrapper::new(Rc::new(RefCell::new(
+            WindowEventHandler::default(),
+        ))))
+    }
+}
 
 impl Deref for InternWindowEventHandler {
-    type Target = RwLock<WindowEventHandler>;
+    type Target = RefCell<WindowEventHandler>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -82,23 +90,30 @@ impl Deref for InternWindowEventHandler {
 
 impl InternWindowEventHandler {
     pub fn get_weak(&self) -> WindowEventHandlerWrapper {
-        WindowEventHandlerWrapper(Arc::downgrade(&self.0))
+        WindowEventHandlerWrapper(SendWrapper::new(Rc::downgrade(&*self.0)))
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct WindowEventHandlerWrapper(Weak<RwLock<WindowEventHandler>>);
+pub struct WindowEventHandlerWrapper(SendWrapper<Weak<RefCell<WindowEventHandler>>>);
 
 impl WindowEventHandlerWrapper {
     pub fn add_handler_fn(&self, widget_id: WidgetId, hander_fn: HandlerFn) -> Option<Uuid> {
         let arc = self.0.upgrade()?;
-        Some(arc.write().add_handler_fn(widget_id, hander_fn))
+        Some(
+            arc.try_borrow_mut()
+                .ok()?
+                .add_handler_fn(widget_id, hander_fn),
+        )
     }
     pub fn remove_handler_fn(&self, handler_id: Uuid) {
         let Some(arc) = self.0.upgrade() else {
             return;
         };
-        arc.write().remove_handler_fn(handler_id);
+        let Ok(mut evs) = arc.try_borrow_mut() else {
+            return;
+        };
+        evs.remove_handler_fn(handler_id);
     }
 }
 

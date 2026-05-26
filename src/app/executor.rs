@@ -17,7 +17,7 @@ impl CustomExecutor for AppExecutor {
     fn spawn_local(&self, fut: any_spawner::PinnedLocalFuture<()>) {
         let proxy = self.proxy.clone();
         let (run, task) = async_task::spawn_local(fut, move |run| {
-            log::trace!("");
+            // log::trace!("");
             let res = proxy.send_event(EventLoopEvent::RunTask(Box::new(run)));
             if res.is_err() {
                 log::warn!("the event loop is already closed!");

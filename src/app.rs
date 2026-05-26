@@ -3,7 +3,9 @@ mod executor;
 mod window;
 
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
+    rc::Rc,
     sync::{Arc, OnceLock, mpsc},
 };
 
@@ -14,7 +16,7 @@ use log::warn;
 use masonry::{
     app::RenderRoot,
     core::{
-        DefaultProperties, WindowEvent as MasonryWindowEvent,
+        DefaultProperties, TextEvent, WindowEvent as MasonryWindowEvent,
         keyboard::{Key, KeyState},
     },
     vello::{
@@ -22,7 +24,6 @@ use masonry::{
         wgpu::{self, InstanceDescriptor},
     },
 };
-use parking_lot::RwLock;
 use reactive_graph::owner::Owner;
 use ui_events_winit::WindowEventTranslation;
 use winit::{
@@ -129,7 +130,7 @@ impl Builder {
         let mut app = App {
             event_loop_proxy: proxy,
             windows: Default::default(),
-            render_context: Arc::new(RwLock::new(RenderContext {
+            render_context: Rc::new(RefCell::new(RenderContext {
                 instance: wgpu_instance,
                 devices: Default::default(),
             })),
@@ -138,8 +139,9 @@ impl Builder {
             owner: self.owner,
             signal_receiver,
             signal_sender,
-            clipboard_context: ClipboardContext::new().unwrap(),
+            clipboard_context: Rc::new(RefCell::new(ClipboardContext::new().unwrap())),
         };
+        // event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
         event_loop.run_app(&mut app)?;
         Ok(())
     }
@@ -151,10 +153,10 @@ struct App {
     default_properties: Arc<DefaultProperties>,
     builder_windows: Option<Vec<WindowBuilder>>,
     owner: Owner,
-    render_context: Arc<RwLock<RenderContext>>,
+    render_context: Rc<RefCell<RenderContext>>,
     signal_receiver: mpsc::Receiver<(WindowId, masonry::app::RenderRootSignal)>,
     signal_sender: mpsc::Sender<(WindowId, masonry::app::RenderRootSignal)>,
-    clipboard_context: ClipboardContext,
+    clipboard_context: Rc<RefCell<ClipboardContext>>,
 }
 
 impl App {
@@ -222,10 +224,16 @@ impl App {
             self.use_window(window_id, |window| {
                 match signal {
                     masonry::app::RenderRootSignal::Action(any_debug, widget_id) => {
-                        window
-                            .window_event_handler
-                            .read()
-                            .handle_event(widget_id, &any_debug);
+                        match window.window_event_handler.try_borrow() {
+                            Ok(evs) => evs.handle_event(widget_id, &any_debug),
+                            Err(_) => {
+                                log::error!(
+                                    "Cannot handle event of {} with {:?}",
+                                    widget_id,
+                                    any_debug,
+                                );
+                            }
+                        };
                     }
                     masonry::app::RenderRootSignal::StartIme => {
                         window.winit_window.set_ime_allowed(true);
@@ -404,6 +412,7 @@ impl ApplicationHandler<EventLoopEvent> for App {
                 .access_kit
                 .process_event(&window.winit_window, &event);
         });
+        let clipboard_context = self.clipboard_context.clone();
         self.use_window(window_id, |window| {
             if !matches!(
                 event,
@@ -430,10 +439,10 @@ impl ApplicationHandler<EventLoopEvent> for App {
                         {
                             window.render_root.use_inner_render_root_mut(|_rr| {
                                 todo_warn_of_something("Clipboard Paste");
-                                /*
-                                rr.tree.handle_text_event(TextEvent::ClipboardPaste(
-                                    self.clipboard_cx.get_contents().unwrap(),
-                                ));*/
+
+                                _rr.tree.handle_text_event(TextEvent::ClipboardPaste(
+                                    clipboard_context.borrow_mut().get_contents().unwrap(),
+                                ));
                             });
                         } else {
                             window.render_root.use_inner_render_root_mut(|rr| {
@@ -471,8 +480,9 @@ impl ApplicationHandler<EventLoopEvent> for App {
                     render_root.handle_text_event(masonry::core::TextEvent::Ime(ime));
                 });
             }
+
             _e => {
-                log::trace!("event {:#?} handling is not implemented yet", _e);
+                // log::trace!("event {:#?} handling is not implemented yet", _e);
             }
         }
         self.handle_signals(event_loop);
@@ -483,6 +493,7 @@ impl ApplicationHandler<EventLoopEvent> for App {
             .values_mut()
             .for_each(|w| w.on_memory_warning());
     }
+    fn suspended(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {}
     fn user_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
@@ -525,6 +536,7 @@ impl ApplicationHandler<EventLoopEvent> for App {
             EventLoopEvent::SetClipboardContent(text) => {
                 let _ = self
                     .clipboard_context
+                    .borrow_mut()
                     .set_contents(text)
                     .inspect_err(|err| log::error!("cannot set clipboard content => {err}"));
             }

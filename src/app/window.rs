@@ -1,5 +1,7 @@
 use std::{
+    cell::RefCell,
     num::NonZeroUsize,
+    rc::Rc,
     sync::{Arc, mpsc},
     time::Instant,
 };
@@ -15,7 +17,6 @@ use masonry::{
         wgpu::{self},
     },
 };
-use parking_lot::RwLock;
 use reactive_graph::owner::{Owner, provide_context};
 use ui_events_winit::WindowEventReducer;
 use winit::window::{Window as WinitWindow, WindowId};
@@ -38,12 +39,12 @@ pub struct Window {
     base_color: AlphaColor<Srgb>,
     surface: Option<RenderSurface<'static>>,
     pub(crate) winit_window: Arc<WinitWindow>,
-    pub(crate) render_context: Arc<RwLock<RenderContext>>,
+    pub(crate) render_context: Rc<RefCell<RenderContext>>,
 }
 
 pub struct WindowNew<'i, V> {
     pub window: Arc<WinitWindow>,
-    pub render_context: &'i Arc<RwLock<vello::util::RenderContext>>,
+    pub render_context: &'i Rc<RefCell<vello::util::RenderContext>>,
     pub view: V,
     pub default_properties: Arc<DefaultProperties>,
     pub access_kit: accesskit_winit::Adapter,
@@ -63,7 +64,9 @@ impl Drop for Window {
 impl Window {
     pub fn on_memory_warning(&mut self) {
         self.render_root.use_inner_render_root_ref(|rr| {
-            let mut write = self.window_event_handler.write();
+            let Ok(mut write) = self.window_event_handler.try_borrow_mut() else {
+                return;
+            };
             write.cleanup(&rr.tree);
             write.shrink_to_fit();
         });
@@ -87,15 +90,24 @@ impl Window {
         let event_handlers = InternWindowEventHandler::default();
 
         let size = window.inner_size();
-        let surface = pollster::block_on(render_context.write().create_surface(
-            window.clone(),
-            size.width,
-            size.height,
-            wgpu::PresentMode::AutoVsync,
-        ))?;
+        let surface = pollster::block_on(
+            render_context
+                .try_borrow_mut()
+                .map_err(|_| crate::error::Error::RenderContextUsedSomewhere)?
+                .create_surface(
+                    window.clone(),
+                    size.width,
+                    size.height,
+                    wgpu::PresentMode::AutoVsync,
+                ),
+        )?;
 
         let renderer = vello::Renderer::new(
-            &render_context.read().devices[surface.dev_id].device,
+            &render_context
+                .try_borrow()
+                .map_err(|_| crate::error::Error::RenderContextUsedSomewhere)?
+                .devices[surface.dev_id]
+                .device,
             RendererOptions {
                 use_cpu: false,
                 antialiasing_support: vello::AaSupport::area_only(),
@@ -155,7 +167,11 @@ impl Window {
         let Some(surface) = self.surface.as_ref() else {
             return Ok(());
         };
-        let device = &self.render_context.read().devices[surface.dev_id];
+        let device = &self
+            .render_context
+            .try_borrow()
+            .map_err(|_| crate::error::Error::RenderContextUsedSomewhere)?
+            .devices[surface.dev_id];
         let scene_target_view = &surface.target_view;
         self.renderer.render_to_texture(
             &device.device,
@@ -174,7 +190,11 @@ impl Window {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self.render_context.read().devices[surface.dev_id]
+        let mut encoder = self
+            .render_context
+            .try_borrow()
+            .map_err(|_| crate::error::Error::RenderContextUsedSomewhere)?
+            .devices[surface.dev_id]
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Surface Blit"),
@@ -186,6 +206,9 @@ impl Window {
         self.winit_window.pre_present_notify();
 
         output.present();
+        {
+            device.device.poll(wgpu::PollType::Wait)?;
+        }
 
         Ok(())
     }
@@ -197,9 +220,11 @@ impl Window {
             return false;
         };
         if let Some(surface) = self.surface.as_mut() {
-            self.render_context
-                .write()
-                .resize_surface(surface, size.width, size.height);
+            let Ok(rd_cx) = self.render_context.try_borrow() else {
+                return false;
+            };
+
+            rd_cx.resize_surface(surface, size.width, size.height);
         }
         true
     }
