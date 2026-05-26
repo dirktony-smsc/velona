@@ -14,4 +14,6 @@ pub enum Error {
     ExecutorAlreadyBeenSet,
     CreateSurface(#[from] wgpu::CreateSurfaceError),
     WgpuPoll(#[from] wgpu::PollError),
+    #[error("The vello render context is used somewhere")]
+    RenderContextUsedSomewhere,
 }
