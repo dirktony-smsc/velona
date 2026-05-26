@@ -369,6 +369,7 @@ impl App {
                 log::error!("Os error on creating new window {err}");
             }
         }
+        self.handle_signals(event_loop);
     }
 }
 
