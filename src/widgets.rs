@@ -1,3 +1,4 @@
+pub mod checkbox;
 pub mod label;
 
 use std::any::TypeId;
