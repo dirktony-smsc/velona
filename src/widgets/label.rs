@@ -9,6 +9,7 @@ use reactive_graph::graph::untrack;
 
 use super::NewWidgetExt;
 
+/// A [`Label`] trait extention
 pub trait NewLabelExt {
     /// It is inefficient to call this function twice
     fn text<S, T>(self, text: S) -> Self
