@@ -2,11 +2,9 @@ use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     rc::Rc,
-    sync::{Arc, OnceLock, mpsc},
+    sync::{Arc, mpsc},
 };
 
-use any_spawner::PinnedFuture;
-use async_executor::Executor;
 use copypasta::{ClipboardContext, ClipboardProvider};
 use log::warn;
 use masonry::{
@@ -17,17 +15,13 @@ use masonry::{
     },
     vello::{
         util::RenderContext,
-        wgpu::{self, InstanceDescriptor},
+        wgpu::{self},
     },
 };
 use reactive_graph::owner::Owner;
 use ui_events_winit::WindowEventTranslation;
 use winit::{
-    application::ApplicationHandler,
-    dpi::PhysicalSize,
-    event::WindowEvent,
-    event_loop::{EventLoop, EventLoopBuilder},
-    window::WindowId,
+    application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, window::WindowId,
 };
 
 use super::window::Window;

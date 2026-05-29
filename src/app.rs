@@ -130,3 +130,5 @@ impl Builder {
         Ok(())
     }
 }
+
+// TODO add an Manager trait
