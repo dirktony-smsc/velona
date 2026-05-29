@@ -1,6 +1,6 @@
 use reactive_graph::owner::use_context;
 
-use crate::app::AppEventLoopProxy;
+use crate::{Manager, app::AppEventLoopProxy};
 
 #[derive(Debug, Clone)]
 pub struct AppHandle {
@@ -18,6 +18,8 @@ impl super::el_event::EventProxyHandle for AppHandle {
         &self.event_proxy
     }
 }
+
+impl Manager for AppHandle {}
 
 /// Get the current app handle.
 pub fn use_app_handle() -> Option<AppHandle> {

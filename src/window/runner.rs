@@ -41,6 +41,7 @@ pub struct Window {
     surface: Option<RenderSurface<'static>>,
     pub(crate) winit_window: Arc<WinitWindow>,
     pub(crate) render_context: Rc<RefCell<RenderContext>>,
+    handle: WindowHandle,
 }
 
 pub struct WindowNew<'i, V> {
@@ -54,6 +55,15 @@ pub struct WindowNew<'i, V> {
     pub signal_sender: mpsc::Sender<(WindowId, RenderRootSignal)>,
     pub parent_owner: &'i Owner,
     pub base_color: Option<AlphaColor<Srgb>>,
+}
+
+impl<'i, V> WindowNew<'i, V> {
+    pub fn handle(&self) -> WindowHandle {
+        WindowHandle {
+            window: Arc::downgrade(&self.window),
+            app_handle: self.app_handle.clone(),
+        }
+    }
 }
 
 impl Drop for Window {
@@ -76,6 +86,7 @@ impl Window {
     where
         V: FnOnce() -> NewWidget<dyn Widget>,
     {
+        let window_handle = args.handle();
         let WindowNew {
             window,
             render_context,
@@ -140,10 +151,7 @@ impl Window {
             let new_widget = window_owner.with(|| {
                 provide_context(render_root.create_weak());
                 provide_context(event_handlers.get_weak());
-                provide_context(WindowHandle {
-                    window: Arc::downgrade(&window),
-                    app_handle: app_handle.clone(),
-                });
+                provide_context(window_handle.clone());
                 provide_context(app_handle);
                 view()
             });
@@ -157,7 +165,7 @@ impl Window {
             }
         }
 
-        Ok(Self {
+        let this = Self {
             renderer,
             surface: Some(surface),
             winit_window: window,
@@ -169,7 +177,9 @@ impl Window {
             window_event_handler: event_handlers,
             base_color: base_color.unwrap_or(BLACK),
             render_context: render_context.clone(),
-        })
+            handle: window_handle,
+        };
+        Ok(this)
     }
     fn render_scene(&mut self, scene: &vello::Scene) -> Result<(), crate::error::Error> {
         let Some(surface) = self.surface.as_ref() else {
@@ -293,5 +303,8 @@ impl Window {
     }
     pub fn create_children_owner(&self) -> Owner {
         self.owner.child()
+    }
+    pub fn get_handle(&self) -> WindowHandle {
+        self.handle.clone()
     }
 }

@@ -266,6 +266,9 @@ impl AppRunner {
                     signal_sender: self.signal_sender.clone(),
                 }) {
                     Ok(new_instance) => {
+                        if let Some(sender) = builder.window_handle_send {
+                            let _ = sender.send(new_instance.get_handle());
+                        }
                         self.windows
                             .insert(new_instance.winit_window.id(), Box::new(new_instance));
                     }

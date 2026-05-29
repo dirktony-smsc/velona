@@ -1,12 +1,16 @@
+use futures_channel::oneshot;
 use masonry::{
     core::{NewWidget, Widget},
     peniko::color::{AlphaColor, Srgb},
 };
 use winit::{dpi::Size, window::WindowAttributes};
+
+use crate::window::handle::WindowHandle;
 pub struct WindowBuilder {
     pub(crate) view: Box<dyn FnOnce() -> NewWidget<dyn Widget + 'static> + Send + Sync>,
     pub(crate) window_attributes: WindowAttributes,
     pub(crate) base_color: Option<AlphaColor<Srgb>>,
+    pub(crate) window_handle_send: Option<oneshot::Sender<WindowHandle>>,
 }
 
 impl WindowBuilder {
@@ -18,6 +22,7 @@ impl WindowBuilder {
             view: Box::new(view_fn),
             window_attributes: WindowAttributes::default(),
             base_color: None,
+            window_handle_send: None,
         }
     }
     pub fn window_attributes(mut self, window_attributes: WindowAttributes) -> Self {
