@@ -7,7 +7,9 @@ use reactive_graph::{
     signal::signal,
     traits::{Get, Set},
 };
-use velona::{AnyNewWidget, Builder, NewWidgetExt, WindowBuilder, widgets::checkbox::_checkbox};
+use velona::{
+    AnyNewWidget, Builder, NewWidgetExt, WindowBuilder, components::checkbox as _checkbox,
+};
 
 fn view() -> AnyNewWidget {
     let (checked, set_checked) = signal(false);

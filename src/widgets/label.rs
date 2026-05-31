@@ -117,12 +117,3 @@ impl NewLabelExt for NewWidget<Label> {
         Label::new(untrack(&text)).with_auto_id().text(text)
     }
 }
-
-// TODO move to [`crate::components`]
-pub fn label<S, T>(text: S) -> NewWidget<Label>
-where
-    S: Fn() -> T + 'static,
-    T: Into<ArcStr>,
-{
-    Label::new(untrack(&text)).with_auto_id().text(text)
-}

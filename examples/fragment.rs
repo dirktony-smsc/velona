@@ -14,8 +14,7 @@ use reactive_graph::{
 };
 use velona::{
     AnyNewWidget, Builder, NewWidgetExt, WindowBuilder,
-    fragment::fragment,
-    widgets::{checkbox::_checkbox, label::label},
+    components::{checkbox as _checkbox, fragment, label},
 };
 
 enum ViewToUse {
